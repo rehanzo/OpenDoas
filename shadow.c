@@ -80,23 +80,28 @@ shadowauth(const char *myname, int persist)
 	snprintf(cbuf, sizeof(cbuf),
 			"\rdoas (%.32s@%.32s) password: ", myname, host);
 	challenge = cbuf;
-
-	response = readpassphrase(challenge, rbuf, sizeof(rbuf), RPP_REQUIRE_TTY);
-	if (response == NULL && errno == ENOTTY) {
-		syslog(LOG_AUTHPRIV | LOG_NOTICE,
-			"tty required for %s", myname);
-		errx(1, "a tty is required");
-	}
-	if (response == NULL)
-		err(1, "readpassphrase");
-	if ((encrypted = crypt(response, hash)) == NULL) {
-		explicit_bzero(rbuf, sizeof(rbuf));
-		errx(1, "Authentication failed");
-	}
-	explicit_bzero(rbuf, sizeof(rbuf));
-	if (strcmp(encrypted, hash) != 0) {
-		syslog(LOG_AUTHPRIV | LOG_NOTICE, "failed auth for %s", myname);
-		errx(1, "Authentication failed");
+	for (int i = 0; i < AUTH_RETRIES; i++) {
+		response = readpassphrase(challenge, rbuf, sizeof(rbuf), RPP_REQUIRE_TTY);
+		if (response == NULL && errno == ENOTTY) {
+			syslog(LOG_AUTHPRIV | LOG_NOTICE,
+				"tty required for %s", myname);
+			errx(1, "a tty is required");
+		}
+		if (response == NULL)
+			err(1, "readpassphrase");
+		if ((encrypted = crypt(response, hash)) == NULL) {
+			explicit_bzero(rbuf, sizeof(rbuf));
+			(i == AUTH_RETRIES - 1) ? errx(1, "Authentication failed") : warnx("Authentication failed");
+		}
+		else {
+			explicit_bzero(rbuf, sizeof(rbuf));
+			if (strcmp(encrypted, hash) != 0) {
+				syslog(LOG_AUTHPRIV | LOG_NOTICE, "failed auth for %s", myname);
+				(i == AUTH_RETRIES - 1) ? errx(1, "Authentication failed") : warnx("Authentication failed");
+			}
+			else
+				break;
+		}
 	}
 
 #ifdef USE_TIMESTAMP

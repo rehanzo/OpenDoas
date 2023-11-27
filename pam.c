@@ -286,11 +286,20 @@ pamauth(const char *user, const char *myname, int interactive, int nopass, int p
 		    "\rdoas (%.32s@%.32s) password: ", myname, host);
 
 		/* authenticate */
-		ret = pam_authenticate(pamh, 0);
-		if (ret != PAM_SUCCESS) {
-			pamcleanup(ret, sess, cred);
-			syslog(LOG_AUTHPRIV | LOG_NOTICE, "failed auth for %s", myname);
-			errx(1, "Authentication failed");
+		for (int i = 0; i < AUTH_RETRIES; i++) {
+			ret = pam_authenticate(pamh, 0);
+			if (ret != PAM_SUCCESS) {
+				syslog(LOG_AUTHPRIV | LOG_NOTICE, "failed auth for %s", myname);
+
+				if (i == AUTH_RETRIES - 1) {
+					pamcleanup(ret, sess, cred);
+					errx(1, "Authentication failed");
+				}
+				else
+					warnx("Authentication failed");
+			}
+			else
+				break;
 		}
 	}
 
